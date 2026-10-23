@@ -1,0 +1,55 @@
+@import 'tailwindcss';
+
+/*
+ * InsureHub design tokens. Tailwind v4 turns each --color-* into utilities
+ * (bg-ink, text-ok, border-rule, …) and --font-* into font-sans / font-mono.
+ */
+@theme {
+  --color-ink: #172A3A;
+  --color-ink-soft: #3D4F5C;
+  --color-ink-hover: #22394C;
+  --color-muted: #5E6E77;
+  --color-paper: #F6F7F5;
+  --color-sheet: #FFFFFF;
+  --color-tray: #EDEFEC;
+  --color-rule: #D3D9D6;
+  --color-field: #A9B4B0;
+  --color-ok: #1F7A5C;
+  --color-ok-tint: #E6F2EC;
+  --color-ok-deep: #164E3B;
+  --color-warn: #9A6212;
+  --color-warn-tint: #F8EFDF;
+  --color-bad: #B3261E;
+  --color-bad-tint: #F9E7E5;
+  --color-focus: #2F6FB3;
+
+  /* Sidebar text on the ink background */
+  --color-rail-text: #DCE4E8;
+  --color-rail-muted: #8EA0AA;
+  --color-rail-num: #7F929D;
+  --color-rail-accent: #7FC7A9;
+  --color-rail-tag: #F2D29B;
+
+  --font-sans: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-paper font-sans text-[0.9375rem] leading-normal text-ink antialiased;
+  }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-focus; }
+}
+
+/* The one decorative flourish: a torn-paper bottom edge marks each API call as a receipt.
+   Tailwind has no utility for CSS masks with this shape, so it stays as a small custom class. */
+@utility receipt-edge {
+  padding-bottom: 5px;
+  -webkit-mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - 5px) no-repeat,
+    conic-gradient(from 135deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 10px 5px repeat-x;
+  mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - 5px) no-repeat,
+    conic-gradient(from 135deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 10px 5px repeat-x;
+}
