@@ -117,20 +117,40 @@ function SkyUpUsers() {
       {rows && (
         <table className="w-full border-collapse text-[0.8125rem]">
           <thead><tr><th className={th}>User</th><th className={th}>Role</th><th className={th}>Status</th><th className={th}>Last login</th><th className={th} /></tr></thead>
-          <tbody>{rows.map((u) => (
+          <tbody>{rows.map((u) => {
+            // ADM-03: nobody can change or disable their own access, so the controls are not shown on
+            // your own row (GR-18: hide what you cannot use). The API refuses it too.
+            const isMe = u.id === user?.id;
+            const roleLabel = u.role === 'ADM' ? 'SkyUp Admin' : 'SkyUp Staff';
+            return (
             <tr key={u.id}>
-              <td className={td}><span className="font-medium">{u.name}</span>{u.id === user?.id && <span className="text-muted"> (you)</span>}<div className="text-muted">{u.mobile}</div></td>
+              <td className={td}><span className="font-medium">{u.name}</span>{isMe && <span className="text-muted"> (you)</span>}<div className="text-muted">{u.mobile}</div></td>
               <td className={td}>
-                <select className={inputClass} value={u.role} onChange={(e) => act((t) => teamApi.setStaffRole(u.id, e.target.value as 'STF' | 'ADM', u.version, t))}>
-                  <option value="STF">SkyUp Staff</option><option value="ADM">SkyUp Admin</option>
-                </select>
+                {isMe ? <span>{roleLabel}</span> : (
+                  <select className={inputClass} value={u.role} onChange={(e) => {
+                    const next = e.target.value as 'STF' | 'ADM';
+                    const nextLabel = next === 'ADM' ? 'SkyUp Admin' : 'SkyUp Staff';
+                    // GR-34: a role change signs the person out, so confirm first.
+                    if (!window.confirm(`Change ${u.name} from ${roleLabel} to ${nextLabel}? They will be signed out at once and get the new role at their next login.`)) {
+                      e.target.value = u.role;
+                      return;
+                    }
+                    void act((t) => teamApi.setStaffRole(u.id, next, u.version, t));
+                  }}>
+                    <option value="STF">SkyUp Staff</option><option value="ADM">SkyUp Admin</option>
+                  </select>
+                )}
               </td>
               <td className={td}><Pill s={u.status} /></td>
               <td className={td}>{fmtDateTime(u.lastLoginAt)}</td>
-              <td className={td}><Button variant={u.status === 'DISABLED' ? 'default' : 'danger'}
-                onClick={() => (u.status === 'DISABLED' || window.confirm(`Disable ${u.name}?`)) && act((t) => teamApi.setStaff(u.id, u.status === 'DISABLED', u.version, t))}>
-                {u.status === 'DISABLED' ? 'Enable' : 'Disable'}</Button></td>
-            </tr>))}
+              <td className={td}>{isMe
+                ? <span className="text-[0.8125rem] text-muted">Only another SkyUp Admin can change your access.</span>
+                : <Button variant={u.status === 'DISABLED' ? 'default' : 'danger'}
+                    onClick={() => (u.status === 'DISABLED' || window.confirm(`Disable ${u.name}? They will be signed out at once.`)) && act((t) => teamApi.setStaff(u.id, u.status === 'DISABLED', u.version, t))}>
+                    {u.status === 'DISABLED' ? 'Enable' : 'Disable'}</Button>}</td>
+            </tr>
+            );
+          })}
           </tbody>
         </table>
       )}

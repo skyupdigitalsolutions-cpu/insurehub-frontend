@@ -9,10 +9,11 @@ import { AccessModule } from './modules/auth/AccessModule';
 import { TeamModule } from './modules/team/TeamModule';
 import { LeadsModule } from './modules/leads/LeadsModule';
 import { CustomersModule } from './modules/customers/CustomersModule';
+import { ProfileModule } from './modules/profile/ProfileModule';
 import { DevToolsModule } from './modules/dev/DevToolsModule';
 
 const SCREENS: Record<string, () => React.JSX.Element | null> = {
-  auth: AccessModule, team: TeamModule, leads: LeadsModule, customers: CustomersModule, dev: DevToolsModule,
+  auth: AccessModule, team: TeamModule, leads: LeadsModule, customers: CustomersModule, profile: ProfileModule, dev: DevToolsModule,
 };
 
 function Banners() {

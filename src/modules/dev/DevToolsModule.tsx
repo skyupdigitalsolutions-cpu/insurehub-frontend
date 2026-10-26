@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { errorText } from '../../api/client';
-import { devApi, type CfgRow } from '../../api/dev';
+import { devApi, type CfgRow, type DevInsurer } from '../../api/dev';
 import { loadReference } from '../../api/reference';
 import { Button } from '../../ui/Button';
 import { inputClass } from '../../ui/form';
@@ -8,6 +8,45 @@ import { Notice } from '../../ui/Notice';
 
 const th = 'border-b border-rule py-2 pr-3 text-left font-semibold text-muted';
 const td = 'border-b border-rule py-2 pr-3 align-top';
+
+/** Insurers for testing P-07 until the catalogue module (P-20) provides the real screens and approvals. */
+function TestInsurers({ onMessage }: { onMessage: (m: string) => void }) {
+  const [rows, setRows] = useState<DevInsurer[]>([]);
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('General');
+  const load = useCallback(async () => { try { setRows(await devApi.insurers()); } catch (e) { onMessage(errorText(e)); } }, [onMessage]);
+  useEffect(() => { void load(); }, [load]);
+  async function create() {
+    if (!name.trim()) return;
+    try { const i = await devApi.createInsurer({ name: name.trim(), category, status: 'ACTIVE' }); setName(''); onMessage(`${i.name} created (ACTIVE).`); await load(); }
+    catch (e) { onMessage(errorText(e)); }
+  }
+  async function toggle(i: DevInsurer) {
+    const next = i.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try { await devApi.setInsurerStatus(i._id, next); onMessage(`${i.name} is now ${next}.`); await load(); } catch (e) { onMessage(errorText(e)); }
+  }
+  return (
+    <section className="max-w-[880px] border-t border-rule py-6">
+      <h2 className="mb-2 text-lg font-semibold">Insurers (until the catalogue module)</h2>
+      <p className="mb-3 text-[0.875rem] text-ink-soft">Advisors can add only ACTIVE insurers (P-07). Making one INACTIVE shows PRF-10 on advisors’ entries and blocks new quotations for it.</p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <input className={`${inputClass} max-w-[280px]`} placeholder="Insurer name" value={name} onChange={(e) => setName(e.target.value)} />
+        <select className={`${inputClass} max-w-[200px]`} value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option>Life</option><option>General</option><option>Standalone Health</option>
+        </select>
+        <Button variant="primary" onClick={() => void create()}>Create ACTIVE insurer</Button>
+      </div>
+      {rows.length > 0 && (
+        <table className="w-full text-[0.875rem]"><thead><tr><th className={th}>Insurer</th><th className={th}>Category</th><th className={th}>Status</th><th className={th} /></tr></thead>
+          <tbody>{rows.map((i) => (
+            <tr key={i._id}><td className={td}>{i.name}</td><td className={td}>{i.category}</td><td className={td}>{i.status}</td>
+              <td className={td}><Button onClick={() => void toggle(i)}>{i.status === 'ACTIVE' ? 'Make INACTIVE' : 'Make ACTIVE'}</Button></td></tr>
+          ))}</tbody>
+        </table>
+      )}
+    </section>
+  );
+}
 
 function CfgEditor({ row, onSaved, onError }: { row: CfgRow; onSaved: () => void; onError: (m: string) => void }) {
   const [value, setValue] = useState(JSON.stringify(row.value));
@@ -74,6 +113,8 @@ export function DevToolsModule() {
           <Button onClick={async () => { const r = await devApi.sms(); await devApi.setSmsFailing(!r.failing); setMessage(r.failing ? 'SMS provider working again.' : 'SMS provider now fails: Send OTP shows AUTH-13.'); }}>Toggle SMS provider failure</Button>
         </div>
       </section>
+
+      <TestInsurers onMessage={setMessage} />
 
       <section className="max-w-[1000px] border-t border-rule py-6">
         <h2 className="mb-2 text-lg font-semibold">Configuration values (CFG)</h2>
