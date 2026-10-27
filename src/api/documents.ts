@@ -10,10 +10,12 @@ export interface DocGroup { personKey: string; personName: string; type: string;
 export interface CustomerDocs { groups: DocGroup[]; missing: { items: string[]; message: string } | null; aadhaarReminder: { message: string } }
 export interface DocDetail extends DocVersion {
   readValues: Record<string, unknown> | null; confirmedValues: Record<string, unknown> | null;
+  /** P-18 step 5: reading runs in the background after the save (GR-26). */
+  readStatus: 'OFF' | 'PENDING' | 'DONE' | 'FAILED';
   history: Array<{ event: 'UPLOADED' | 'LABEL_CHANGED'; name?: string; from?: string; to?: string; by: string; at: string }>;
   messageId?: string; message?: string;
 }
-export interface Uploaded extends DocVersion { personName: string; verify: { values: Record<string, unknown>; messageId: string; message: string } | null }
+export interface Uploaded extends DocVersion { personName: string; verify: { reading: boolean; values: Record<string, unknown>; messageId?: string; message?: string } | null }
 export interface Confirmed {
   document: DocVersion;
   identity: { field: 'PAN' | 'AADHAAR'; copied: boolean; differs: boolean; current?: string | null; fromDocument?: string } | null;

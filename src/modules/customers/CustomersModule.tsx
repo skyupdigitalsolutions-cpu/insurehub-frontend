@@ -77,7 +77,7 @@ export function CustomersModule() {
     <main className="overflow-y-auto px-[clamp(20px,4vw,56px)] pt-9 pb-16">
       <header className="mb-6 max-w-[68ch]">
         <h1 className="text-[1.9rem] leading-tight font-bold tracking-[-0.01em]">Customers, family and consent</h1>
-        <p className="mt-2 text-ink-soft">P-15 to P-17 and P-19. Each customer's documents (P-18) are on their Documents tab; vehicles (P-54) come next.</p>
+        <p className="mt-2 text-ink-soft">P-15 to P-17 and P-19. Each customer's documents (P-18) and vehicles (P-54) are on their own tabs.</p>
       </header>
       <Tabs tabs={[['customers', 'Customers'], ['checks', 'Backend checks']]} active={tab} onChange={setTab} />
       {tab === 'checks' ? <CheckList checks={CUSTOMER_CHECKS} intro="Each check uses a throwaway advisor account." />

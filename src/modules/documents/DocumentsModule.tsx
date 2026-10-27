@@ -124,12 +124,22 @@ function Verify({ id, customer, onDone }: { id: string; customer: Customer; onDo
   const [busy, setBusy] = useState(false);
   const [differs, setDiffers] = useState<{ field: 'PAN' | 'AADHAAR'; current?: string | null; fromDocument?: string; value: string } | null>(null);
   useEffect(() => {
-    documentsApi.get(id).then((x) => {
-      setD(x);
-      const read = x.readValues ?? {};
-      setValues(Object.fromEntries(Object.entries(read).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v ?? '')])));
-      if (x.type === 'Old policy') documentsApi.insurers().then(setInsurers, () => setInsurers([]));
-    }, (e) => setError(errorText(e)));
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // GR-26: reading runs after the save. Ask again until it is done; fill only fields the user has not typed in.
+    const poll = async (first: boolean) => {
+      try {
+        const x = await documentsApi.get(id);
+        if (stop) return;
+        setD(x);
+        const read = Object.fromEntries(Object.entries(x.readValues ?? {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v ?? '')]));
+        setValues((cur) => ({ ...read, ...Object.fromEntries(Object.entries(cur).filter(([, v]) => v.trim() !== '')) }));
+        if (first && x.type === 'Old policy') documentsApi.insurers().then(setInsurers, () => setInsurers([]));
+        if (x.readStatus === 'PENDING') timer = setTimeout(() => void poll(false), 1500);
+      } catch (e) { if (!stop) setError(errorText(e)); }
+    };
+    void poll(true);
+    return () => { stop = true; if (timer) clearTimeout(timer); };
   }, [id]);
   if (error && !d) return <Notice tone="error">{error}</Notice>;
   if (!d) return <p className="text-muted">Loading…</p>;
@@ -164,7 +174,9 @@ function Verify({ id, customer, onDone }: { id: string; customer: Customer; onDo
   return (
     <section className="mb-6 rounded border border-warn bg-sheet p-4">
       <h2 className="mb-2 text-[1.05rem] font-semibold">Check {d.type} (version {d.version})</h2>
-      {d.message && <div className="mb-3"><Notice tone="warn">{d.message}</Notice></div>}
+      {d.readStatus === 'PENDING'
+        ? <div className="mb-3"><Notice>Reading the document… The details appear here when it finishes; you can start typing meanwhile.</Notice></div>
+        : d.message && <div className="mb-3"><Notice tone="warn">{d.message}</Notice></div>}
       <div className="grid gap-5 md:grid-cols-2">
         <div>{preview}</div>
         <div className="grid gap-3">
@@ -287,7 +299,7 @@ export function DocumentsModule() {
     <main className="overflow-y-auto px-[clamp(20px,4vw,56px)] pt-9 pb-16">
       <header className="mb-6 max-w-[68ch]">
         <h1 className="text-[1.9rem] leading-tight font-bold tracking-[-0.01em]">Document vault</h1>
-        <p className="mt-2 text-ink-soft">P-18. Every client document is kept as a permanent record: new uploads add versions, nothing is deleted, and Aadhaar, PAN and old policies are checked by a person before anything is saved. Vehicles (P-54) are the next stage.</p>
+        <p className="mt-2 text-ink-soft">P-18. Every client document is kept as a permanent record: new uploads add versions, nothing is deleted, and Aadhaar, PAN and old policies are checked by a person before anything is saved. Each customer also has Documents and Vehicles (P-54) tabs.</p>
       </header>
       <Tabs tabs={[...(can('documents.work') ? [['docs', 'Documents']] as Array<['docs', string]> : []), ['checks', 'Backend checks']]} active={tab} onChange={setTab} />
       {tab === 'docs' && (customer ? <CustomerDocuments summary={customer} onBack={() => setCustomer(null)} /> : <CustomerPicker onPick={setCustomer} />)}

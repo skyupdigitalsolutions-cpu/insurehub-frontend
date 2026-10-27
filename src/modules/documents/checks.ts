@@ -19,6 +19,13 @@ async function setup(consent = true) {
     as(token, `add ${type}`).post('/documents', { customerId: cus.id, personKey: `C:${cus.id}`, type, fileId: await file(token), ...extra });
   return { f, cus, file, add };
 }
+/** + Vehicle with n slot photos and an RC (P-54). */
+async function addVehicle(f: Fixture, customerId: string, n: number, extra: object = {}) {
+  const slots = ['Front', 'Rear', 'Left', 'Right', 'Odometer', 'Chassis number'].slice(0, n);
+  const up = async () => data<{ id: string }>(await uploadFile(PNG(), 'CUSTOMER_DOCUMENT', 'photo.png', { bearer: f.token, label: 'Check: upload photo.png' })).id;
+  const photos = await Promise.all(slots.map(async (slot) => ({ slot, fileId: await up() })));
+  return as(f.token, 'save vehicle').post(`/customers/${customerId}/vehicles`, { registration: 'KA01AB1234', vehicleType: 'Private car', make: 'Maruti', model: 'Swift', year: 2021, fuel: 'Petrol', rcFileId: await up(), photos, ...extra });
+}
 const docOf = (r: Reply) => data<{ id: string; rev: number; version: number; status: string; file: { id: string } }>(r);
 const listOf = async (f: Fixture, customerId: string) => data<{ groups: Array<{ type: string; versions: Array<{ version: number }> }>; missing: { message: string } | null }>(await as(f.token, 'list documents').get(`/customers/${customerId}/documents`));
 
@@ -137,6 +144,87 @@ export const DOCUMENT_CHECKS: Check[] = [
       const file = await as(o.token, 'other opens file link').get(`/files/${d.file.id}`);
       const ok = list.res.status === 404 && messageId(list) === 'GEN-11' && doc.res.status === 404 && file.res.status === 404;
       return { verdict: verdict(ok), observed: `list ${seen(list)}; document ${doc.res.status}; file ${file.res.status}` };
+    },
+  },
+  // ── P-54 vehicles ──
+  {
+    id: 'p54-few-photos', title: 'AC-P54-1: a vehicle with fewer than CFG-154 photos cannot be saved',
+    expect: '3 photos → 400 photos VEH-02 "Add at least 4 photos before saving."; no vehicle saved',
+    async run() {
+      const { f, cus } = await setup(false);
+      const r = await addVehicle(f, cus.id, 3);
+      const list = data<{ vehicles: unknown[] }>(await as(f.token, 'list vehicles').get(`/customers/${cus.id}/vehicles`)).vehicles;
+      return { verdict: verdict(fields(r).photos === 'VEH-02' && JSON.stringify(r.json).includes('Add at least 4 photos before saving.') && list.length === 0), observed: `${seen(r)} ${JSON.stringify(fields(r))}; vehicles ${list.length}` };
+    },
+  },
+  {
+    id: 'p54-save', title: 'P-54: the vehicle, RC and photos are saved together; registration in capitals without spaces',
+    expect: '201 VEH-01 "Vehicle KA01AB1234 added for …"; 1 RC and 4 photos',
+    async run() {
+      const { f, cus } = await setup(false);
+      const r = await addVehicle(f, cus.id, 4, { registration: 'ka 01 ab-1234' });
+      const v = r.res.ok ? data<{ registration: string; rc: unknown[]; photos: Array<{ versions: unknown[] }> }>(r) : null;
+      const ok = r.res.status === 201 && meta(r).message === `Vehicle KA01AB1234 added for ${cus.name}.` && v?.rc.length === 1 && v.photos.filter((s) => s.versions.length).length === 4;
+      return { verdict: verdict(ok), observed: `${seen(r)} "${meta(r).message ?? ''}"` };
+    },
+  },
+  {
+    id: 'p54-several', title: 'AC-P54-2: one customer can have several vehicles, each with its own RC and photos',
+    expect: 'two vehicles listed, with different RC files',
+    async run() {
+      const { f, cus } = await setup(false);
+      await addVehicle(f, cus.id, 4, { registration: 'KA01AB1234' });
+      await addVehicle(f, cus.id, 4, { registration: '22BH1234AA', vehicleType: 'Two-wheeler', fuel: 'Electric' });
+      const list = data<{ vehicles: Array<{ registration: string; rc: Array<{ file: { id: string } }> }> }>(await as(f.token, 'list vehicles').get(`/customers/${cus.id}/vehicles`)).vehicles;
+      const ok = list.length === 2 && list[0]!.rc[0]!.file.id !== list[1]!.rc[0]!.file.id;
+      return { verdict: verdict(ok), observed: list.map((v) => v.registration).join(', ') };
+    },
+  },
+  {
+    id: 'p54-duplicate', title: 'AC-P54-3: a registration already ACTIVE in the account is refused',
+    expect: 'second customer, same registration → 409 VEH-03 "Vehicle … is already recorded for …"',
+    async run() {
+      const { f, cus } = await setup(false);
+      await addVehicle(f, cus.id, 4, { registration: 'MH12DE3456' });
+      const other = data<{ id: string }>(await as(f.token, 'second customer').post('/customers', { name: 'Second check customer', mobile: randomMobile() }));
+      const r = await addVehicle(f, other.id, 4, { registration: 'MH12DE3456' });
+      return { verdict: verdict(messageId(r) === 'VEH-03' && meta(r).message === undefined && JSON.stringify(r.json).includes(`Vehicle MH12DE3456 is already recorded for ${cus.name}.`)), observed: seen(r) };
+    },
+  },
+  {
+    id: 'p54-sold', title: 'AC-P54-4: marking a vehicle sold keeps its RC and photos; it can be marked active again',
+    expect: 'INACTIVE with 1 RC and 4 photos still there; then ACTIVE again',
+    async run() {
+      const { f, cus } = await setup(false);
+      const v = data<{ id: string; version: number }>(await addVehicle(f, cus.id, 4));
+      const sold = await as(f.token, 'mark as sold').post(`/vehicles/${v.id}/status`, { version: v.version, status: 'INACTIVE' });
+      const s = data<{ status: string; version: number; rc: unknown[]; photos: Array<{ versions: unknown[] }> }>(sold);
+      const back = await as(f.token, 'mark active again').post(`/vehicles/${v.id}/status`, { version: s.version, status: 'ACTIVE' });
+      const ok = s.status === 'INACTIVE' && s.rc.length === 1 && s.photos.filter((x) => x.versions.length).length === 4 && data<{ status: string }>(back).status === 'ACTIVE';
+      return { verdict: verdict(ok), observed: `${s.status}: RC ${s.rc.length}, photos ${s.photos.filter((x) => x.versions.length).length}; then ${back.res.ok ? data<{ status: string }>(back).status : seen(back)}` };
+    },
+  },
+  {
+    id: 'p54-version', title: 'P-54 step 4: a newer photo for a slot adds version 2 and keeps version 1',
+    expect: '"Front photo saved as version 2."; Front shows versions 2 and 1',
+    async run() {
+      const { f, cus, file } = await setup(false);
+      const v = data<{ id: string }>(await addVehicle(f, cus.id, 4));
+      const r = await as(f.token, 'new Front photo').post(`/vehicles/${v.id}/files`, { kind: 'PHOTO', slot: 'Front', fileId: await file() });
+      const front = data<{ photos: Array<{ slot: string; versions: Array<{ version: number }> }> }>(r).photos.find((x) => x.slot === 'Front');
+      return { verdict: verdict(meta(r).message === 'Front photo saved as version 2.' && JSON.stringify(front?.versions.map((x) => x.version)) === '[2,1]'), observed: `"${meta(r).message ?? seen(r)}"; ${JSON.stringify(front?.versions.map((x) => x.version))}` };
+    },
+  },
+  {
+    id: 'p54-isolation', title: 'GR-20: another account cannot see or change these vehicles',
+    expect: 'other advisor: list → 404 GEN-11; mark sold → 404',
+    async run() {
+      const { f, cus } = await setup(false);
+      const v = data<{ id: string }>(await addVehicle(f, cus.id, 4));
+      const o = await fixtureAdvisor();
+      const list = await as(o.token, 'other lists vehicles').get(`/customers/${cus.id}/vehicles`);
+      const sold = await as(o.token, 'other marks sold').post(`/vehicles/${v.id}/status`, { version: 1, status: 'INACTIVE' });
+      return { verdict: verdict(list.res.status === 404 && messageId(list) === 'GEN-11' && sold.res.status === 404), observed: `list ${seen(list)}; sold ${sold.res.status}` };
     },
   },
 ];
