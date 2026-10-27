@@ -3,6 +3,7 @@ import { api } from './client';
 /** Lists and limits from the API (they are CFG values a SkyUp Admin can change, so never typed here). */
 export interface Reference {
   leadSources: string[]; lostReasons: string[]; relationships: string[]; insuranceTypes: string[]; pipelineNames: string[];
+  documentTypes: string[]; verifyDocumentTypes: string[]; vehicleDocumentTypes: string[]; vehiclePhotoSlots: string[];
   leadStatuses: Array<{ code: string; label: string }>; contactOutcomes: Array<{ code: string; label: string }>; priorities: string[];
   states: string[]; genders: string[]; preferredContacts: string[]; consentHowGiven: string[]; deactivationReasons: string[];
   limits: { otpLength: number; otpValidityMinutes: number; resendSeconds: number; idleMinutes: number; idleWarningMinutes: number; nameMin: number; nameMax: number;

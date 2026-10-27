@@ -26,6 +26,7 @@ export function as(token: string, label: string) {
     post: (p: string, body: object = {}, extra: Record<string, string> = {}, key?: string) => rawRequest('POST', p, body, { ...o(extra), idempotencyKey: key ?? newKey() }),
     patch: (p: string, body: object) => rawRequest('PATCH', p, body, o()),
     put: (p: string, body: object) => rawRequest('PUT', p, body, o()),
+    del: (p: string) => rawRequest('DELETE', p, undefined, o()),
   };
 }
 

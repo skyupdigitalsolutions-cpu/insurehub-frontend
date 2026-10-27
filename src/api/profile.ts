@@ -28,7 +28,7 @@ export interface ReviewItem extends Kyc {
   accountId: string; advisorName: string | null; dob: string | null; rejectReasons: string[];
   licence: { number: string | null; validUntil: string | null; type: string | null };
 }
-export type FilePurpose = 'PROFILE_PHOTO' | 'BUSINESS_LOGO' | 'KYC_PAN' | 'KYC_LICENCE' | 'APPOINTMENT_LETTER';
+export type FilePurpose = 'PROFILE_PHOTO' | 'BUSINESS_LOGO' | 'KYC_PAN' | 'KYC_LICENCE' | 'APPOINTMENT_LETTER' | 'CUSTOMER_DOCUMENT';
 export interface InsurerRef { id: string; name: string; shortCode: string; category: string; status: string }
 export interface Mapping {
   id: string; insurer: InsurerRef | null; agentCode: string; validUntil: string | null; status: 'ACTIVE' | 'INACTIVE'; version: number;

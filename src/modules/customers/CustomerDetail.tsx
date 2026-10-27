@@ -4,6 +4,7 @@ import { customersApi, type Channel, type ConsentGrid, type Customer, type Famil
 import { CONTACT_LABEL, GENDER_LABEL } from '../../api/reference';
 import { useReference } from '../../api/useReference';
 import { useAuth } from '../../auth/AuthProvider';
+import { CustomerDocuments } from '../documents/DocumentsModule';
 import { Button } from '../../ui/Button';
 import { Field, Tabs, fmtDate, fmtDateTime, inputClass } from '../../ui/form';
 import { Notice } from '../../ui/Notice';
@@ -192,7 +193,7 @@ function Identity({ c, reload, flash }: { c: Customer; reload: () => Promise<voi
   );
   return (
     <div className="grid gap-4">
-      <p className="text-[0.875rem] text-ink-soft">GR-36/37: stored encrypted, always shown masked. Only the advisor can show the full number, for a few seconds, and every view is recorded. Personal-data consent: <strong>{c.personalDataConsent.replace('_', ' ')}</strong>.</p>
+      <p className="text-[0.875rem] text-ink-soft">GR-36/37: stored encrypted, always shown masked. Only the advisor can show the full number, for a few seconds, and every view is recorded. Personal-data consent: <strong>{c.personalDataConsent.replace('_', ' ')}</strong>. To keep the PAN or Aadhaar card image, add it on the <strong>Documents</strong> tab: confirming it fills the number here.</p>
       <div className="grid gap-2 text-[0.9375rem]">{row('PAN', 'PAN', c.identity.pan)}{row('Aadhaar', 'AADHAAR', c.identity.aadhaar)}</div>
       {c.status === 'ACTIVE' && !user?.readOnly && (
         <div className="grid gap-3 rounded border border-rule p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
@@ -206,8 +207,9 @@ function Identity({ c, reload, flash }: { c: Customer; reload: () => Promise<voi
 }
 
 export function CustomerDetail({ id, onChanged }: { id: string; onChanged: (message?: string) => void }) {
+  const { can: canDo } = useAuth();
   const [c, setC] = useState<Customer | null>(null);
-  const [tab, setTab] = useState<'overview' | 'family' | 'consent' | 'identity'>('overview');
+  const [tab, setTab] = useState<'overview' | 'family' | 'consent' | 'identity' | 'documents'>('overview');
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
   const load = useCallback(async () => setC(await customersApi.get(id)), [id]);
@@ -226,11 +228,12 @@ export function CustomerDetail({ id, onChanged }: { id: string; onChanged: (mess
         </span>
       </div>
       {note && <Notice tone={note.tone}>{note.text}</Notice>}
-      <Tabs tabs={[['overview', 'Overview'], ['family', `Family (${c.family.filter((m) => m.status === 'ACTIVE').length})`], ['consent', 'Consent'], ['identity', 'PAN and Aadhaar']]} active={tab} onChange={setTab} />
+      <Tabs tabs={[['overview', 'Overview'], ['family', `Family (${c.family.filter((m) => m.status === 'ACTIVE').length})`], ['consent', 'Consent'], ['identity', 'PAN and Aadhaar'], ...(canDo('documents.work') ? [['documents', 'Documents'] as ['documents', string]] : [])]} active={tab} onChange={setTab} />
       {tab === 'overview' && <Overview c={c} reload={load} flash={flash} />}
       {tab === 'family' && <Family c={c} reload={load} flash={flash} />}
       {tab === 'consent' && <Consent c={c} flash={flash} />}
       {tab === 'identity' && <Identity c={c} reload={load} flash={flash} />}
+      {tab === 'documents' && <CustomerDocuments summary={c} embedded onChanged={() => void load()} />}
     </section>
   );
 }

@@ -7,7 +7,7 @@ export const MODULES: Array<{ key: string; name: string; ref: string; state: Mod
   { key: 'leads', name: 'Leads and pipelines', ref: '§7 P-12–P-14', state: 'built' },
   { key: 'customers', name: 'Customers, family, consent', ref: '§8 P-15–P-17 P-19', state: 'built' },
   { key: 'profile', name: 'Advisor profile, KYC, agent codes', ref: '§5 P-05–P-07', state: 'built' },
-  { key: 'documents', name: 'Document vault and vehicles', ref: 'P-18 P-54', state: 'pending' },
+  { key: 'documents', name: 'Document vault and vehicles', ref: 'P-18 P-54', state: 'built' },
   { key: 'dashboard', name: 'Dashboard, search, bell, tasks', ref: '§6 P-08–P-11', state: 'pending' },
   { key: 'catalogue', name: 'Insurance catalogue', ref: '§9 P-20–P-25 P-58', state: 'pending' },
   { key: 'bestfit', name: 'Best-fit ranking', ref: '§10 P-26', state: 'pending' },
