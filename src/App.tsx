@@ -11,10 +11,14 @@ import { LeadsModule } from './modules/leads/LeadsModule';
 import { CustomersModule } from './modules/customers/CustomersModule';
 import { ProfileModule } from './modules/profile/ProfileModule';
 import { DocumentsModule } from './modules/documents/DocumentsModule';
+import { DashboardModule } from './modules/dashboard/DashboardModule';
+import { CatalogueModule } from './modules/catalogue/CatalogueModule';
+import { TopBar } from './shell/TopBar';
+import { useModuleSwitch } from './shell/nav';
 import { DevToolsModule } from './modules/dev/DevToolsModule';
 
 const SCREENS: Record<string, () => React.JSX.Element | null> = {
-  auth: AccessModule, team: TeamModule, leads: LeadsModule, customers: CustomersModule, profile: ProfileModule, documents: DocumentsModule, dev: DevToolsModule,
+  auth: AccessModule, team: TeamModule, leads: LeadsModule, customers: CustomersModule, profile: ProfileModule, documents: DocumentsModule, dashboard: DashboardModule, catalogue: CatalogueModule, dev: DevToolsModule,
 };
 
 function Banners() {
@@ -41,6 +45,7 @@ function Banners() {
 function Workspace() {
   const { status } = useAuth();
   const [active, setActive] = useState('auth');
+  useModuleSwitch(setActive); // search, bell and dashboard open records in their module
 
   let main;
   if (status === 'checking') {
@@ -58,7 +63,7 @@ function Workspace() {
     // Three columns on desktop (modules | work | test panel); stacked below 1100px.
     <div className="grid h-dvh grid-cols-1 overflow-hidden max-[1100px]:h-auto max-[1100px]:overflow-visible min-[1100px]:grid-cols-[264px_minmax(0,1fr)_minmax(320px,400px)]">
       <Rail active={active} onSelect={setActive} />
-      <div className="flex min-h-0 flex-col overflow-hidden [&>main]:min-h-0 [&>main]:flex-1"><Banners />{main}</div>
+      <div className="flex min-h-0 flex-col overflow-hidden [&>main]:min-h-0 [&>main]:flex-1">{status === 'signedIn' && active !== 'dev' && <TopBar />}<Banners />{main}</div>
       <WireLog />
     </div>
   );

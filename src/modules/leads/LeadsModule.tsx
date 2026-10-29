@@ -3,6 +3,7 @@ import { errorText } from '../../api/client';
 import { STAGES, STATUS_LABEL, leadsApi, type LeadSummary, type Pipeline } from '../../api/leads';
 import { PRIORITY_LABEL } from '../../api/reference';
 import { useAuth } from '../../auth/AuthProvider';
+import { useOpenRecord } from '../../shell/nav';
 import { Button } from '../../ui/Button';
 import { CheckList } from '../../ui/CheckList';
 import { Tabs, fmtDateTime, inputClass, labelClass } from '../../ui/form';
@@ -20,6 +21,13 @@ function Board() {
   const [priority, setPriority] = useState('');
   const [rows, setRows] = useState<LeadSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  useOpenRecord((t) => t.type === 'LEAD' || (t.type === 'LIST' && t.list === 'LEADS'), (t) => {
+    if (t.type === 'LEAD') { setSelected(t.id); return; }
+    if (t.type !== 'LIST') return;
+    const fl = t.filter ?? {};
+    if (typeof fl.search === 'string') setSearch(fl.search);
+    if (fl.create) setCreating(true);
+  });
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

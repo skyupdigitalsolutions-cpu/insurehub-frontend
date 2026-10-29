@@ -207,10 +207,10 @@ function Identity({ c, reload, flash }: { c: Customer; reload: () => Promise<voi
   );
 }
 
-export function CustomerDetail({ id, onChanged }: { id: string; onChanged: (message?: string) => void }) {
+export function CustomerDetail({ id, onChanged, initialTab }: { id: string; onChanged: (message?: string) => void; initialTab?: 'family' | 'documents' | 'vehicles' }) {
   const { can: canDo } = useAuth();
   const [c, setC] = useState<Customer | null>(null);
-  const [tab, setTab] = useState<'overview' | 'family' | 'consent' | 'identity' | 'documents' | 'vehicles'>('overview');
+  const [tab, setTab] = useState<'overview' | 'family' | 'consent' | 'identity' | 'documents' | 'vehicles'>(initialTab ?? 'overview');
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
   const load = useCallback(async () => setC(await customersApi.get(id)), [id]);

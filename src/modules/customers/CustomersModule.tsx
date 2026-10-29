@@ -7,6 +7,7 @@ import { CheckList } from '../../ui/CheckList';
 import { Tabs, fmtDate, inputClass, labelClass } from '../../ui/form';
 import { Notice } from '../../ui/Notice';
 import { CustomerDetail } from './CustomerDetail';
+import { useOpenRecord } from '../../shell/nav';
 import { CustomerForm } from './CustomerForm';
 import { CUSTOMER_CHECKS } from './checks';
 
@@ -21,6 +22,15 @@ function CustomersTab() {
   const [rows, setRows] = useState<CustomerSummary[] | null>(null);
   const [meta, setMeta] = useState<Meta>({});
   const [selected, setSelected] = useState<string | null>(null);
+  const [openTab, setOpenTab] = useState<'family' | 'documents' | 'vehicles' | undefined>(undefined);
+  useOpenRecord((t) => t.type === 'CUSTOMER' || (t.type === 'LIST' && t.list === 'CUSTOMERS'), (t) => {
+    if (t.type === 'CUSTOMER') { setSelected(t.id); setOpenTab(t.tab); return; }
+    if (t.type !== 'LIST') return;
+    const fl = t.filter ?? {};
+    if (Array.isArray(fl.status)) setStatus(String(fl.status[0] ?? ''));
+    if (typeof fl.search === 'string') setSearch(fl.search);
+    if (fl.create) setCreating(true);
+  });
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +75,7 @@ function CustomersTab() {
           <Button disabled={page >= (meta.pages ?? 1)} onClick={() => setPage(page + 1)}>Next</Button>
         </div>
       )}
-      {selected && <CustomerDetail key={selected} id={selected} onChanged={changed} />}
+      {selected && <CustomerDetail key={`${selected}-${openTab ?? ''}`} id={selected} initialTab={openTab} onChanged={changed} />}
     </div>
   );
 }
