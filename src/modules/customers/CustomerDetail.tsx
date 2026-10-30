@@ -6,6 +6,7 @@ import { useReference } from '../../api/useReference';
 import { useAuth } from '../../auth/AuthProvider';
 import { CustomerDocuments } from '../documents/DocumentsModule';
 import { VehiclesTab } from '../vehicles/vehiclesTab';
+import { BestFitTab } from '../bestfit/BestFitTab';
 import { Button } from '../../ui/Button';
 import { Field, Tabs, fmtDate, fmtDateTime, inputClass } from '../../ui/form';
 import { Notice } from '../../ui/Notice';
@@ -210,7 +211,7 @@ function Identity({ c, reload, flash }: { c: Customer; reload: () => Promise<voi
 export function CustomerDetail({ id, onChanged, initialTab }: { id: string; onChanged: (message?: string) => void; initialTab?: 'family' | 'documents' | 'vehicles' }) {
   const { can: canDo } = useAuth();
   const [c, setC] = useState<Customer | null>(null);
-  const [tab, setTab] = useState<'overview' | 'family' | 'consent' | 'identity' | 'documents' | 'vehicles'>(initialTab ?? 'overview');
+  const [tab, setTab] = useState<'overview' | 'family' | 'consent' | 'identity' | 'documents' | 'vehicles' | 'bestfit'>(initialTab ?? 'overview');
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
   const load = useCallback(async () => setC(await customersApi.get(id)), [id]);
@@ -229,13 +230,14 @@ export function CustomerDetail({ id, onChanged, initialTab }: { id: string; onCh
         </span>
       </div>
       {note && <Notice tone={note.tone}>{note.text}</Notice>}
-      <Tabs tabs={[['overview', 'Overview'], ['family', `Family (${c.family.filter((m) => m.status === 'ACTIVE').length})`], ['consent', 'Consent'], ['identity', 'PAN and Aadhaar'], ...(canDo('documents.work') ? [['documents', 'Documents'] as ['documents', string]] : []), ...(canDo('vehicles.work') ? [['vehicles', 'Vehicles'] as ['vehicles', string]] : [])]} active={tab} onChange={setTab} />
+      <Tabs tabs={[['overview', 'Overview'], ['family', `Family (${c.family.filter((m) => m.status === 'ACTIVE').length})`], ['consent', 'Consent'], ['identity', 'PAN and Aadhaar'], ...(canDo('documents.work') ? [['documents', 'Documents'] as ['documents', string]] : []), ...(canDo('vehicles.work') ? [['vehicles', 'Vehicles'] as ['vehicles', string]] : []), ...(canDo('bestfit.use') ? [['bestfit', 'Best fit'] as ['bestfit', string]] : [])]} active={tab} onChange={setTab} />
       {tab === 'overview' && <Overview c={c} reload={load} flash={flash} />}
       {tab === 'family' && <Family c={c} reload={load} flash={flash} />}
       {tab === 'consent' && <Consent c={c} flash={flash} />}
       {tab === 'identity' && <Identity c={c} reload={load} flash={flash} />}
       {tab === 'documents' && <CustomerDocuments summary={c} embedded onChanged={() => void load()} />}
       {tab === 'vehicles' && <VehiclesTab customerId={c.id} customerActive={c.status === 'ACTIVE'} />}
+      {tab === 'bestfit' && <BestFitTab customerId={c.id} />}
     </section>
   );
 }

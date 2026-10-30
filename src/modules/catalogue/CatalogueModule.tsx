@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { errorText, fieldErrors, warningsOf } from '../../api/client';
-import { catalogueApi, type Approval, type CatInsurer, type InsurerValues } from '../../api/catalogue';
+import { catalogueApi, productsApi, type Approval, type CatInsurer, type InsurerValues } from '../../api/catalogue';
+import { ProductsAdminTab } from './ProductsAdminTab';
+import { ProductsTab } from './ProductsTab';
+import { CorrectionsQueue } from './StageFourB';
 import { useAuth } from '../../auth/AuthProvider';
 import { useStepUp } from '../../auth/StepUp';
 import { Button } from '../../ui/Button';
@@ -168,7 +171,9 @@ function Approvals({ admin }: { admin: boolean }) {
     try {
       const token = await requestStepUp();
       const why = (reason[a.id] ?? '').trim();
-      const r = a.kind === 'TEMPLATE'
+      const r = a.kind === 'PRODUCT'
+        ? (approve ? await productsApi.approve(a.id, a.version, token) : await productsApi.reject(a.id, a.version, why, token))
+        : a.kind === 'TEMPLATE'
         ? (approve ? await catalogueApi.approveTemplate(a.id, a.version, token) : await catalogueApi.rejectTemplate(a.id, a.version, why, token))
         : (approve ? await catalogueApi.approve(a.id, a.version, token) : await catalogueApi.reject(a.id, a.version, why, token));
       setMessage(r.meta.message ?? 'Done.'); void load();
@@ -181,7 +186,14 @@ function Approvals({ admin }: { admin: boolean }) {
       {!admin && <div className="mb-4"><Notice>Only a SkyUp Admin can approve or reject. Staff can see what is waiting.</Notice></div>}
       {!rows ? <p className="text-muted">Loading…</p> : rows.length === 0 ? <p className="text-muted">Nothing waiting for approval.</p> : rows.map((a) => (
         <section key={`${a.id}-${a.version}`} className="mb-4 rounded border border-rule bg-sheet p-4 text-[0.875rem]">
-          <div className="mb-2 flex flex-wrap items-baseline gap-2"><span className="font-semibold">{a.kind === 'TEMPLATE' ? 'Feature template' : a.what === 'NEW' ? 'New insurer' : 'Change to insurer'}: {a.name}</span><span className="text-muted">submitted {fmtDateTime(a.at)}{a.mine ? ' by you' : ''}</span></div>
+          <div className="mb-2 flex flex-wrap items-baseline gap-2"><span className="font-semibold">{a.kind === 'PRODUCT' ? (a.what === 'NEW' ? 'New product' : 'Product change') : a.kind === 'TEMPLATE' ? 'Feature template' : a.what === 'NEW' ? 'New insurer' : 'Change to insurer'}: {a.name}</span><span className="text-muted">submitted {fmtDateTime(a.at)}{a.mine ? ' by you' : ''}</span></div>
+          {a.kind === 'PRODUCT' && a.what === 'CHANGE' && (a.changes ?? []).length > 0 && (
+            <table className="mb-3 w-full"><tbody>
+              {(a.changes ?? []).map((c) => (
+                <tr key={c.field}><td className={`${td} w-[30%] text-muted`}>{c.field}</td><td className={td}><span className="line-through">{JSON.stringify(c.before)}</span> → {JSON.stringify(c.after)}</td></tr>
+              ))}
+            </tbody></table>
+          )}
           {a.what === 'CHANGE' && a.current && a.proposed && (
             <table className="mb-3 w-full"><tbody>
               {(Object.keys(LABEL) as Array<keyof InsurerValues>).filter((k) => show(a.current![k]) !== show(a.proposed![k])).map((k) => (
@@ -206,18 +218,20 @@ export function CatalogueModule() {
   const { can } = useAuth();
   const maker = can('catalogue.make');
   const admin = can('catalogue.approve');
-  const [tab, setTab] = useState<'insurers' | 'types' | 'approvals' | 'checks'>(maker ? 'insurers' : 'checks');
+  const seller = can('products.view');
+  const [tab, setTab] = useState<'insurers' | 'types' | 'products' | 'approvals' | 'checks'>(maker ? 'insurers' : seller ? 'products' : 'checks');
   return (
     <main className="overflow-y-auto px-[clamp(20px,4vw,56px)] pt-7 pb-16">
       <header className="mb-5 max-w-[68ch]">
         <h1 className="text-[1.9rem] leading-tight font-bold tracking-[-0.01em]">Insurance catalogue</h1>
-        <p className="mt-2 text-ink-soft">Section 9, P-20 and P-21. SkyUp Staff and Admins make changes; a different Admin approves them with an OTP. Products are the next stage.</p>
+        <p className="mt-2 text-ink-soft">Section 9, P-20 to P-22 and P-25. SkyUp makes verified products and a different Admin approves them with an OTP; advisors see the published ones and can add their own.</p>
       </header>
-      <Tabs tabs={[...(maker ? [['insurers', 'Insurers'], ['types', 'Insurance types'], ['approvals', 'Approvals']] as Array<['insurers' | 'types' | 'approvals', string]> : []), ['checks', 'Backend checks']]} active={tab} onChange={setTab} />
-      {!maker && tab !== 'checks' && <Notice>The catalogue is managed by SkyUp Staff and Admins.</Notice>}
+      <Tabs tabs={[...(maker ? [['insurers', 'Insurers'], ['types', 'Insurance types'], ['products', 'Products'], ['approvals', 'Approvals']] as Array<['insurers' | 'types' | 'products' | 'approvals', string]> : []), ...(seller ? [['products', 'Products']] as Array<['products', string]> : []), ['checks', 'Backend checks']]} active={tab} onChange={setTab} />
+      {!maker && !seller && tab !== 'checks' && <Notice>The catalogue is managed by SkyUp Staff and Admins.</Notice>}
       {tab === 'insurers' && <Insurers admin={admin} />}
       {tab === 'types' && <TypesTab admin={admin} />}
-      {tab === 'approvals' && <Approvals admin={admin} />}
+      {tab === 'products' && (maker ? <ProductsAdminTab admin={admin} /> : <ProductsTab />)}
+      {tab === 'approvals' && <><CorrectionsQueue /><Approvals admin={admin} /></>}
       {tab === 'checks' && <CheckList checks={CATALOGUE_CHECKS} intro="Run these signed in as the seeded SkyUp Admin. Each check adds a throwaway SkyUp Staff member as the maker (with your OTP from the dev inbox) and approves as you." />}
     </main>
   );

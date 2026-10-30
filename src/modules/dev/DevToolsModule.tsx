@@ -5,6 +5,7 @@ import { loadReference } from '../../api/reference';
 import { Button } from '../../ui/Button';
 import { inputClass } from '../../ui/form';
 import { Notice } from '../../ui/Notice';
+import { rawRequest } from '../../api/client';
 
 const th = 'border-b border-rule py-2 pr-3 text-left font-semibold text-muted';
 const td = 'border-b border-rule py-2 pr-3 align-top';
@@ -92,6 +93,7 @@ export function DevToolsModule() {
       </header>
       {message && <Notice>{message}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
+      <ExtendTrial />
 
       <section className="max-w-[880px] border-t border-rule py-6">
         <h2 className="mb-2 text-lg font-semibold">Test clock</h2>
@@ -127,5 +129,29 @@ export function DevToolsModule() {
         </div>
       </section>
     </main>
+  );
+}
+
+/** Read-only mode (GR-33) starts when the trial ends. Move the trial's end date forward (plans and renewals are P-47). */
+function ExtendTrial() {
+  const [mobile, setMobile] = useState('');
+  const [days, setDays] = useState('30');
+  const [out, setOut] = useState<string | null>(null);
+  async function run() {
+    const r = await rawRequest('POST', '/dev/extend-trial', { mobile, days: Number(days) }, { label: 'Extend trial', idempotencyKey: false });
+    const d = (r.json as { data?: { endsAt: string } }).data;
+    setOut(r.res.ok && d ? `Trial now ends ${new Date(d.endsAt).toLocaleString('en-IN')}. Log out and in again.` : 'No advisor with that mobile.');
+  }
+  return (
+    <section className="max-w-[880px] border-t border-rule py-6">
+      <h2 className="text-[1.15rem] font-semibold">Extend trial</h2>
+      <p className="mt-1 text-[0.875rem] text-ink-soft">When a trial ends the account turns read-only (GR-33). Give an advisor more trial days.</p>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <input className={`${inputClass} max-w-[220px]`} placeholder="Advisor mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} />
+        <input className={`${inputClass} max-w-[100px]`} placeholder="Days" value={days} onChange={(e) => setDays(e.target.value)} />
+        <Button variant="primary" onClick={() => void run()}>Extend trial</Button>
+      </div>
+      {out && <p className="mt-2 text-[0.875rem]">{out}</p>}
+    </section>
   );
 }

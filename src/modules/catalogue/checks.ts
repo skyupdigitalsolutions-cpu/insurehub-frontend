@@ -45,6 +45,49 @@ async function newType(token?: string) {
   return data<{ type: { id: string }; template: { id: string; rev: number } }>(r);
 }
 
+const PDATA = {
+  name: 'Check Family Shield', uin: 'CHKUIN0001', launchDate: '01-01-2026', adultMin: 18, adultMax: 65, coversChildren: true, childMin: 0, childMax: 25,
+  sumInsured: { options: [500000] }, policyTerms: [1], pricingMode: 'MANUAL_ENTRY', taxPercent: 18, nomineeRequired: true, maxNominees: 2,
+  sourceLink: 'https://checkinsurer.in/family', sourceCheckedOn: '01-10-2026',
+  features: { room_rent_limit: { value: 5000, page: 3 }, pre_existing_disease_waiting_period: { notStated: true } },
+};
+
+/** Once per run: a live insurer and a type with a live template, each made by a staff maker and approved by you. */
+let base: Promise<{ insurerId: string; typeId: string; staff: Fixture }> | null = null;
+function catalogueBase(adminMobile: string) {
+  base ??= (async () => {
+    const s = await staffMaker(adminMobile);
+    const ins = data<{ id: string; version: number }>(await as(s.token, 'staff submits insurer').post('/admin/insurers', insurer(uniq(), { submit: true })));
+    await approve(adminMobile, ins.id, ins.version);
+    const t = await newType(s.token);
+    const v = data<{ rev: number }>(await as(s.token, 'staff saves template').put(`/admin/templates/${t.template.id}`, { rev: t.template.rev, features: FEATURES, factors: [AGE], questions: [] }));
+    const sub = data<{ rev: number }>(await as(s.token, 'staff submits template').post(`/admin/templates/${t.template.id}/submit`, { rev: v.rev }));
+    await mine('POST', `/admin/templates/${t.template.id}/approve`, { rev: sub.rev }, { 'X-Step-Up-Token': await myStepUp(adminMobile) });
+    return { insurerId: ins.id, typeId: t.type.id, staff: s };
+  })().catch((e) => { base = null; throw e; });
+  return base;
+}
+
+/** The staff maker creates a verified product, saves the values and submits. */
+async function staffProduct(b: { insurerId: string; typeId: string; staff: Fixture }, d: object) {
+  const S = as(b.staff.token, 'staff product');
+  const c = data<{ productId: string; version: { id: string; rev: number } }>(await S.post('/admin/products', { insurerId: b.insurerId, typeId: b.typeId, code: `PRD-${uniq()}` }));
+  const saved = data<{ rev: number }>(await S.put(`/admin/product-versions/${c.version.id}`, { rev: c.version.rev, data: d }));
+  const sub = await S.post(`/admin/product-versions/${c.version.id}/submit`, { rev: saved.rev });
+  return { productId: c.productId, vid: c.version.id, sub };
+}
+
+/** An IST day n days from today, as DD-MM-YYYY and YYYY-MM-DD. */
+const istDay = (n: number) => { const d = new Date(Date.now() + 5.5 * 3_600_000 + n * 86_400_000); const iso = d.toISOString().slice(0, 10); return { dmy: `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`, iso }; };
+const ROWS = [{ factors: { age_of_eldest: '18-35' }, basePremium: 9000 }, { factors: { age_of_eldest: '36-45' }, basePremium: 15000 }];
+/** A fresh advisor with an own RATE_TABLE product on the run's live type. */
+async function rateProduct(adminMobile: string) {
+  const b = await catalogueBase(adminMobile);
+  const adv = await fixtureAdvisor();
+  const own = await as(adv.token, 'own rate-table product').post('/my-products', { insurerId: b.insurerId, typeId: b.typeId, code: `RT-${uniq()}`, data: { ...PDATA, pricingMode: 'RATE_TABLE', sourceLink: undefined, sourceCheckedOn: undefined } });
+  return { adv, id: data<{ id: string }>(own).id };
+}
+
 export const CATALOGUE_CHECKS: Check[] = [
   {
     id: 'p20-fields', title: 'P-20 fields: code capitals, bare payment domain (CAT-10), https web address, Indian phone',
@@ -195,6 +238,116 @@ export const CATALOGUE_CHECKS: Check[] = [
       const t = await newType();
       const r = await mine('POST', `/admin/types/${t.type.id}/templates`, {});
       return { verdict: verdict(r.res.status === 409 && messageId(r) === 'CAT-08'), observed: seen(r) };
+    },
+  },
+  // ── P-22 / P-25 products ──
+  {
+    id: 'p22-uin', title: 'AC-P22-1: a product without a UIN cannot be saved (CAT-33)',
+    expect: 'submit without UIN → uin CAT-33 "UIN is required to save a product."',
+    async run() {
+      const a = await me(); if (!a) return blocked;
+      const b = await catalogueBase(a.mobile);
+      const { sub } = await staffProduct(b, { ...PDATA, uin: undefined });
+      return { verdict: verdict(fields(sub).uin === 'CAT-33'), observed: `${seen(sub)} ${JSON.stringify(fields(sub))}` };
+    },
+  },
+  {
+    id: 'p22-missing', title: 'P-22: an incomplete product lists what is missing (CAT-13)',
+    expect: '"This product cannot be saved yet: product name, launch date, …"',
+    async run() {
+      const a = await me(); if (!a) return blocked;
+      const b = await catalogueBase(a.mobile);
+      const { sub } = await staffProduct(b, { uin: 'CHKUIN0001' });
+      return { verdict: verdict(messageId(sub) === 'CAT-13' && JSON.stringify(sub.json).includes('This product cannot be saved yet: product name, launch date')), observed: seen(sub) };
+    },
+  },
+  {
+    id: 'p25-publish', title: 'P-25: a draft is invisible to advisors; you approve with OTP; AC-P22-5 "Not stated by insurer"',
+    expect: 'before approval advisor gets 404; after: PUBLISHED, the unstated feature shows "Not stated by insurer"',
+    async run() {
+      const a = await me(); if (!a) return blocked;
+      const b = await catalogueBase(a.mobile);
+      const { productId, vid, sub } = await staffProduct(b, PDATA);
+      const adv = await fixtureAdvisor();
+      const before = await as(adv.token, 'advisor opens draft product').get(`/products/${productId}`);
+      const ok = await mine('POST', `/admin/product-versions/${vid}/approve`, { rev: data<{ rev: number }>(sub).rev }, { 'X-Step-Up-Token': await myStepUp(a.mobile) });
+      const p = data<{ publishedVersion: { data: { features: Record<string, { value: unknown }> } } }>(await as(adv.token, 'advisor opens product').get(`/products/${productId}`));
+      const unstated = p.publishedVersion.data.features.pre_existing_disease_waiting_period?.value;
+      const pass = before.res.status === 404 && data<{ status: string }>(ok).status === 'PUBLISHED' && unstated === 'Not stated by insurer';
+      return { verdict: verdict(pass), observed: `before ${before.res.status}; approve ${ok.res.ok ? data<{ status: string }>(ok).status : seen(ok)}; feature "${unstated}"` };
+    },
+  },
+  {
+    id: 'p25-withdraw', title: 'AC-P25-4: a withdrawn product (CAT-26) cannot be quoted but stays listed for renewals',
+    expect: 'quotable list excludes it; full list shows WITHDRAWN, renewalOnly',
+    async run() {
+      const a = await me(); if (!a) return blocked;
+      const b = await catalogueBase(a.mobile);
+      const { productId, vid, sub } = await staffProduct(b, PDATA);
+      await mine('POST', `/admin/product-versions/${vid}/approve`, { rev: data<{ rev: number }>(sub).rev }, { 'X-Step-Up-Token': await myStepUp(a.mobile) });
+      const p = data<{ version: number }>(await mine('GET', `/admin/products/${productId}`));
+      const w = await mine('POST', `/admin/products/${productId}/withdraw`, { version: p.version, reason: 'Check: insurer stopped selling it' });
+      const adv = await fixtureAdvisor();
+      const quotable = data<Array<{ id: string }>>(await as(adv.token, 'quotable products').get('/products?quotable=true')).some((x) => x.id === productId);
+      const row = data<Array<{ id: string; status: string; renewalOnly: boolean }>>(await as(adv.token, 'all products').get('/products')).find((x) => x.id === productId);
+      const pass = JSON.stringify(w.json).includes('is withdrawn. Advisors can no longer quote it.') && !quotable && row?.status === 'WITHDRAWN' && row.renewalOnly;
+      return { verdict: verdict(pass), observed: `"${meta(w).message ?? seen(w)}"; quotable ${quotable}; listed ${row?.status}` };
+    },
+  },
+  {
+    id: 'p22-own', title: 'AC-P22-2: an advisor\u2019s own product and commission are invisible to every other account',
+    expect: 'own product published at once; commission saved (CAT-36); another advisor gets 404 for both',
+    async run() {
+      const a = await me(); if (!a) return blocked;
+      const b = await catalogueBase(a.mobile);
+      const adv = await fixtureAdvisor();
+      const own = await as(adv.token, 'add my product').post('/my-products', { insurerId: b.insurerId, typeId: b.typeId, code: `MY-${uniq()}`, data: { ...PDATA, sourceLink: undefined, sourceCheckedOn: undefined } });
+      if (!own.res.ok) return { verdict: 'fail', observed: `own product: ${seen(own)} ${JSON.stringify(fields(own))}` };
+      const id = data<{ id: string }>(own).id;
+      const c = await as(adv.token, 'save commission').put(`/products/${id}/commercials`, { commissionPercent: '12.5' });
+      const other = await fixtureAdvisor();
+      const p = await as(other.token, 'other opens product').get(`/products/${id}`);
+      const k = await as(other.token, 'other opens commission').get(`/products/${id}/commercials`);
+      const pass = JSON.stringify(c.json).includes('Only you can see it.') && p.res.status === 404 && k.res.status === 404;
+      return { verdict: verdict(pass), observed: `"${meta(c).message ?? seen(c)}"; other: product ${p.res.status}, commission ${k.res.status}` };
+    },
+  },
+  // ── P-24 price versions ──
+  {
+    id: 'p24-close', title: 'AC-P24-1: a new price from day 5 closes the current one on day 4 (CAT-37)',
+    expect: '"New price from {day 5} saved. The current price applies until {day 4}."; v1 ends on day 4',
+    async run() {
+      const a = await me(); if (!a) return blocked;
+      const { adv, id } = await rateProduct(a.mobile);
+      await as(adv.token, 'price v1').post(`/products/${id}/prices`, { effectiveFrom: istDay(0).dmy, taxPercent: 18, rows: ROWS });
+      const v2 = await as(adv.token, 'price v2').post(`/products/${id}/prices`, { effectiveFrom: istDay(5).dmy, taxPercent: 18, rows: ROWS });
+      const list = data<Array<{ name: string; effectiveTo: string | null; status: string }>>(await as(adv.token, 'my prices').get(`/products/${id}/prices`));
+      const v1 = list.find((x) => x.name === 'v1');
+      const pass = meta(v2).message === `New price from ${istDay(5).dmy} saved. The current price applies until ${istDay(4).dmy}.` && v1?.effectiveTo === istDay(4).iso;
+      return { verdict: verdict(pass), observed: `"${meta(v2).message ?? seen(v2)}"; v1 until ${v1?.effectiveTo}` };
+    },
+  },
+  {
+    id: 'p24-before', title: 'AC-P24-2: a price starting on or before the current price\u2019s start is refused (CAT-38)',
+    expect: 'second price from today → effectiveFrom CAT-38',
+    async run() {
+      const a = await me(); if (!a) return blocked;
+      const { adv, id } = await rateProduct(a.mobile);
+      await as(adv.token, 'price v1').post(`/products/${id}/prices`, { effectiveFrom: istDay(0).dmy, taxPercent: 18, rows: ROWS });
+      const r = await as(adv.token, 'price again from today').post(`/products/${id}/prices`, { effectiveFrom: istDay(0).dmy, taxPercent: 18, rows: ROWS });
+      return { verdict: verdict(fields(r).effectiveFrom === 'CAT-38'), observed: `${seen(r)} ${JSON.stringify(fields(r))}` };
+    },
+  },
+  {
+    id: 'p24-private', title: 'AC-P24-5: another advisor cannot see these prices',
+    expect: 'another advisor → 404 on the prices of this own product',
+    async run() {
+      const a = await me(); if (!a) return blocked;
+      const { adv, id } = await rateProduct(a.mobile);
+      await as(adv.token, 'price v1').post(`/products/${id}/prices`, { effectiveFrom: istDay(0).dmy, taxPercent: 18, rows: ROWS });
+      const other = await fixtureAdvisor();
+      const r = await as(other.token, 'other advisor reads prices').get(`/products/${id}/prices`);
+      return { verdict: verdict(r.res.status === 404), observed: seen(r) };
     },
   },
 ];

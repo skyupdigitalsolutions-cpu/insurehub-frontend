@@ -13,12 +13,15 @@ import { ProfileModule } from './modules/profile/ProfileModule';
 import { DocumentsModule } from './modules/documents/DocumentsModule';
 import { DashboardModule } from './modules/dashboard/DashboardModule';
 import { CatalogueModule } from './modules/catalogue/CatalogueModule';
+import { BestFitModule } from './modules/bestfit/BestFitModule';
+import { QuotationsModule } from './modules/quotations/QuotationsModule';
+import { ProposalsModule } from './modules/payments/ProposalsModule';
 import { TopBar } from './shell/TopBar';
 import { useModuleSwitch } from './shell/nav';
 import { DevToolsModule } from './modules/dev/DevToolsModule';
 
 const SCREENS: Record<string, () => React.JSX.Element | null> = {
-  auth: AccessModule, team: TeamModule, leads: LeadsModule, customers: CustomersModule, profile: ProfileModule, documents: DocumentsModule, dashboard: DashboardModule, catalogue: CatalogueModule, dev: DevToolsModule,
+  auth: AccessModule, team: TeamModule, leads: LeadsModule, customers: CustomersModule, profile: ProfileModule, documents: DocumentsModule, dashboard: DashboardModule, catalogue: CatalogueModule, bestfit: BestFitModule, quotes: QuotationsModule, payments: ProposalsModule, dev: DevToolsModule,
 };
 
 function Banners() {
